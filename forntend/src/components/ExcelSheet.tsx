@@ -1,5 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import './ExcelSheet.css';
 
 const ROWS = 50;
@@ -10,6 +10,7 @@ const ExcelSheet = () => {
   const [changes, setChanges] = useState(Array(ROWS).fill(null).map(() => Array(COLS).fill(false)));
   const [updatedCells, setUpdatedCells] = useState([]);
   const [history, setHistory] = useState([]);
+  const [isHistoryVisible, setIsHistoryVisible] = useState(false);
 
   useEffect(() => {
     const sheetId = 'your-sheet-id'; // This should be dynamic in a real app
@@ -34,7 +35,7 @@ const ExcelSheet = () => {
     };
 
     fetchData();
-  }, []); // Empty dependency array means this runs once on mount
+  }, []);
 
   const handleCellChange = (e, rowIndex, colIndex) => {
     const newData = [...data];
@@ -53,12 +54,10 @@ const ExcelSheet = () => {
     } else {
       setUpdatedCells([...updatedCells, { row: rowIndex, col: colIndex, value: e.target.value }]);
     }
-
-    console.log('Updated Cells:', updatedCells);
   };
 
   const handleSave = async () => {
-    const sheetId = 'your-sheet-id'; // This should be dynamic in a real app
+    const sheetId = 'your-sheet-id';
     const dataToSend = updatedCells.map(cell => ({ ...cell, sheetId }));
 
     try {
@@ -74,6 +73,27 @@ const ExcelSheet = () => {
         alert('Changes saved successfully!');
         setUpdatedCells([]);
         setChanges(Array(ROWS).fill(null).map(() => Array(COLS).fill(false)));
+
+        // Save history
+        try {
+          const historyResponse = await fetch('http://localhost:3000/api/v1/sheet/save-history', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ sheetId }),
+          });
+
+          if (historyResponse.ok) {
+            console.log('History saved successfully!');
+            handleHistory();
+          } else {
+            console.error('Failed to save history.');
+          }
+        } catch (error) {
+          console.error('Error saving history:', error);
+        }
+
       } else {
         alert('Failed to save changes.');
       }
@@ -84,23 +104,27 @@ const ExcelSheet = () => {
   };
 
   const handleHistory = async () => {
-    const sheetId = 'your-sheet-id'; // This should be dynamic in a real app
+    const sheetId = 'your-sheet-id';
     try {
       const response = await fetch(`http://localhost:3000/api/v1/sheet/history/${sheetId}`);
       if (response.ok) {
         const historyData = await response.json();
         if (historyData && Array.isArray(historyData.data)) {
           setHistory(historyData.data);
-        } else {
-          setHistory([]);
         }
       } else {
         alert('Failed to fetch history.');
       }
     } catch (error) {
       console.error('Error fetching history:', error);
-      alert('An error occurred while fetching history.');
     }
+  };
+
+  const toggleHistory = () => {
+    if (!isHistoryVisible) {
+      handleHistory();
+    }
+    setIsHistoryVisible(!isHistoryVisible);
   };
 
   const renderTable = () => {
@@ -129,31 +153,35 @@ const ExcelSheet = () => {
 
   return (
     <div className="excel-sheet-container">
-      {renderTable()}
-      <div className="info-container">
-        <div className="changed-cells">
-          <h3>Updated Cells</h3>
-          <button onClick={handleSave}>Save Changes</button>
-          <ul>
-            {updatedCells.map((cell, index) => (
-              <li key={index}>
-                Row: {cell.row}, Col: {cell.col}, Value: {cell.value}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="history">
-          <h3>History</h3>
-          <button onClick={handleHistory}>Show History</button>
-          <ul>
-            {history.map((entry, index) => (
-              <li key={index}>
-                Row: {entry.row}, Col: {entry.col}, Value: {entry.value} @ {new Date(entry.createdAt).toLocaleString()}
-              </li>
-            ))}
-          </ul>
+      <div className={`main-content ${isHistoryVisible ? 'sidebar-visible' : ''}`}>
+        {renderTable()}
+        <div className="info-container">
+          <div className="changed-cells">
+            <h3>Updated Cells</h3>
+            <button onClick={handleSave}>Save Changes</button>
+            <ul>
+              {updatedCells.map((cell, index) => (
+                <li key={index}>
+                  Row: {cell.row}, Col: {cell.col}, Value: {cell.value}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
+      <div className={`history-sidebar ${isHistoryVisible ? 'visible' : ''}`}>
+        <h3>History</h3>
+        <ul>
+          {history.map((entry, index) => (
+            <li key={index}>
+              <Link to={`/history/${entry.id}`}>{new Date(entry.createdAt).toLocaleString()}</Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <button className="toggle-history-btn" onClick={toggleHistory}>
+        {isHistoryVisible ? 'Close History' : 'History'}
+      </button>
     </div>
   );
 };
